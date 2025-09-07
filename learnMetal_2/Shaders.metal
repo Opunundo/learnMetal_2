@@ -8,8 +8,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
-struct Constants {
-    float animatedBy;
+struct ModelConstants {
+    float4x4 modelViewMatrix;
 };
 
 struct VertexIn {
@@ -24,9 +24,10 @@ struct VertexOut {
     float2 textureCoordinates;
 };
 
-vertex VertexOut vertex_shader(const VertexIn vertexIn [[ stage_in ]]) {
+vertex VertexOut vertex_shader(const VertexIn vertexIn [[ stage_in ]],
+                               constant ModelConstants &modelConstants [[ buffer(1) ]]) {
     VertexOut vertexOut;
-    vertexOut.position = vertexIn.position;
+    vertexOut.position = modelConstants.modelViewMatrix * vertexIn.position;
     vertexOut.color = vertexIn.color;
     vertexOut.textureCoordinates = vertexIn.textureCoordinates;
     
@@ -47,7 +48,7 @@ fragment half4 fragment_grayShader(VertexOut vertexIn [[ stage_in ]]) {
     return half4(vertexOut.color);
 }
 
-fragment half4 fragment_textureShader(VertexOut vertexIn [[ stage_in ]],
+fragment half4 defaultTexture(VertexOut vertexIn [[ stage_in ]],
                                       sampler sampler2d [[ sampler(0)]],
                                       texture2d<float> texture [[ texture(0) ]]) {
     constexpr sampler defaultSampler;

@@ -36,10 +36,7 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
     var vertexBuffer: MTLBuffer?
     var indexBuffer: MTLBuffer?
     
-    struct Constants {
-        var animatedBy: Float = 0.0
-    }
-    var constants = Constants()
+    var modelConstants = ModelConstants()
     var time: Float = 0.0
     
     var texture: MTLTexture?
@@ -52,9 +49,6 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         
         if let texture = setTexture(device: device, imageName: "image.png") {
             self.texture = texture
-        }
-        if let frameTexture = setTexture(device: device, imageName: "frame.png") {
-            self.frameTexture = frameTexture
         }
         
         buildSamplerState()
@@ -96,7 +90,7 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
     private func buildPipelineState() {
         guard let library = device.makeDefaultLibrary(),
               let vertexFunction = library.makeFunction(name: "vertex_shader"),
-              let fragmentFunction = library.makeFunction(name: "maskedTexture")
+              let fragmentFunction = library.makeFunction(name: "defaultTexture")
         else { return }
         
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
@@ -143,18 +137,28 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         time += 1 / Float(view.preferredFramesPerSecond)
         
         let animatedBy = abs(sin(time)/2 + 0.5)
-        constants.animatedBy = animatedBy
+        
+        let rotationMatrix = matrix_float4x4(rotationAngle: animatedBy, x:0, y:0, z:1)
+        let viewMatrix = matrix_float4x4(translationX: 0, y: 0, z: -4)
+        let modelViewMatrix = matrix_multiply(rotationMatrix, viewMatrix)
+        modelConstants.modelViewMatrix = modelViewMatrix
+        
+        let aspect = Float(1206.0/2622.0)
+        let projectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: aspect, near: 0.1, far: 100)
+        
+        modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, modelViewMatrix)
+        
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         guard let commandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
         
         commandEncoder.setRenderPipelineState(pipelineState)
         commandEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-//        commandEncoder.setVertexBytes(&constants,
-//                                      length: MemoryLayout<Constants>.stride,
-//                                      index: 1)
+        commandEncoder.setVertexBytes(&modelConstants,
+                                      length: MemoryLayout<ModelConstants>.stride,
+                                      index: 1)
         commandEncoder.setFragmentTexture(texture, index: 0)
-        commandEncoder.setFragmentTexture(frameTexture, index: 1)
+
 
         commandEncoder.setFragmentSamplerState(samplerState, index: 0)
        /* commandEncoder.drawPrimitives(type: .triangle,
