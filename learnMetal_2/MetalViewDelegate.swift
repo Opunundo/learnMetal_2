@@ -15,6 +15,8 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
     let cube = Cube()
     
     var samplerState: MTLSamplerState?
+    var depthStencilState: MTLDepthStencilState?
+    
     var defaultShader: MTLRenderPipelineState?
     var texturedShader: MTLRenderPipelineState?
     
@@ -41,7 +43,7 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         
         buildSamplerState()
         buildBuffers()
-        
+        buildDepthStencilState()
         defaultShader = buildPipelineState(frag: "fragment_shader")
         texturedShader = buildPipelineState(frag: "defaultTexture")
     }
@@ -69,17 +71,11 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         self.samplerState = device.makeSamplerState(descriptor: descriptor)
     }
     
-    private func buildBuffers() {
-        planeVertexBuffer = device.makeBuffer(bytes: plane.planeVertices, length: plane.planeVertices.count * MemoryLayout<Vertex>.stride,//struct를 타입으로 쓰는 경우 .size 대신 .stride 사용. padding이 생길 수도 있으므로
-                                         options: [])
-        planeIndexBuffer = device.makeBuffer(bytes: plane.planeIndices,
-                                             length: plane.planeIndices.count * MemoryLayout<UInt16>.size,
-                                        options: [])
-        
-        cubeVertexBuffer = device.makeBuffer(bytes: cube.cubeVertices, length: cube.cubeVertices.count * MemoryLayout<Vertex>.stride,
-                                             options: [])
-        cubeIndexBuffer = device.makeBuffer(bytes: cube.cubeIndices, length: cube.cubeIndices.count * MemoryLayout<Vertex>.stride,
-                                            options: [])
+    private func buildDepthStencilState() {
+        let depthStencilDescriptor = MTLDepthStencilDescriptor()
+        depthStencilDescriptor.depthCompareFunction = .less
+        depthStencilDescriptor.isDepthWriteEnabled = true
+        depthStencilState = device.makeDepthStencilState(descriptor: depthStencilDescriptor)
     }
     
     private func buildPipelineState(frag: String) -> MTLRenderPipelineState? {
@@ -121,6 +117,19 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         }
     }
     
+    private func buildBuffers() {
+        planeVertexBuffer = device.makeBuffer(bytes: plane.planeVertices, length: plane.planeVertices.count * MemoryLayout<Vertex>.stride,//struct를 타입으로 쓰는 경우 .size 대신 .stride 사용. padding이 생길 수도 있으므로
+                                         options: [])
+        planeIndexBuffer = device.makeBuffer(bytes: plane.planeIndices,
+                                             length: plane.planeIndices.count * MemoryLayout<UInt16>.size,
+                                        options: [])
+        
+        cubeVertexBuffer = device.makeBuffer(bytes: cube.cubeVertices, length: cube.cubeVertices.count * MemoryLayout<Vertex>.stride,
+                                             options: [])
+        cubeIndexBuffer = device.makeBuffer(bytes: cube.cubeIndices, length: cube.cubeIndices.count * MemoryLayout<UInt16>.size,
+                                            options: [])
+    }
+    
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         
     }
@@ -137,6 +146,11 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         guard let commandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
         
+        let aspect = Float(1206.0/2622.0)
+        let projectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: aspect, near: 0.1, far: 100)
+        
+        commandEncoder.setDepthStencilState(depthStencilState)
+        
         commandEncoder.setRenderPipelineState(defaultShader)
         
         time += 1 / Float(view.preferredFramesPerSecond)
@@ -144,13 +158,14 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         let animatedBy = time
         
         let rotationMatrix = matrix_float4x4(rotationAngle: animatedBy, x:0, y: 1, z: 1)
-        let viewMatrix = matrix_float4x4(translationX: 0, y: 0, z: -5)
-
-        let modelViewMatrix = matrix_multiply(viewMatrix, rotationMatrix)
+        var translationMatrix = matrix_float4x4(translationX: 0, y: 0, z: -5)
+        var scaleMatrix = matrix_float4x4(scaleX: 1, y: 1, z: 1)
+        
+        
+        let modelViewMatrix = matrix_multiply(translationMatrix, rotationMatrix)
         modelConstants.modelViewMatrix = modelViewMatrix
         
-        let aspect = Float(1206.0/2622.0)
-        let projectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: aspect, near: 0.1, far: 100)
+
         
         modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, modelViewMatrix)
     
@@ -161,15 +176,25 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         commandEncoder.setFragmentTexture(texture, index: 0)
 
         commandEncoder.setFragmentSamplerState(samplerState, index: 0)
+        
+        commandEncoder.setFrontFacing(.counterClockwise)
+        commandEncoder.setCullMode(.back)
+        
         commandEncoder.drawIndexedPrimitives(type: .triangle,
                                              indexCount: cube.cubeIndices.count,
                                       indexType: .uint16,
                                       indexBuffer: cubeIndexBuffer,
                                       indexBufferOffset: 0)
         
-        
         commandEncoder.setRenderPipelineState(texturedShader)
-        modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, viewMatrix)
+        translationMatrix = matrix_float4x4(translationX: 0, y: -1, z: -7)
+        scaleMatrix = matrix_float4x4(scaleX: 1.5, y: 1.5, z: 0)
+        
+        let transformedMatrix = matrix_multiply(translationMatrix, scaleMatrix)
+        
+        modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, transformedMatrix)
+        
+        
         commandEncoder.setVertexBuffer(planeVertexBuffer, offset: 0, index: 0)
         commandEncoder.setVertexBytes(&modelConstants,
                                       length: MemoryLayout<ModelConstants>.stride,
@@ -177,11 +202,13 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         commandEncoder.setFragmentTexture(texture, index: 0)
 
         commandEncoder.setFragmentSamplerState(samplerState, index: 0)
+        
         commandEncoder.drawIndexedPrimitives(type: .triangle,
                                              indexCount: plane.planeIndices.count,
                                       indexType: .uint16,
                                       indexBuffer: planeIndexBuffer,
                                       indexBufferOffset: 0)
+
         
         commandEncoder.endEncoding()
         commandBuffer.present(drawable)
