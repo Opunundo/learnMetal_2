@@ -26,7 +26,7 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
     var cubeVertexBuffer: MTLBuffer?
     var cubeIndexBuffer: MTLBuffer?
     
-    var modelConstants = ModelConstants()
+    var cubeModelConstants = ModelConstants()
     var time: Float = 0.0
     
     var texture: MTLTexture?
@@ -146,39 +146,46 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         guard let commandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
         
-        let aspect = Float(1206.0/2622.0)
-        let projectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: aspect, near: 0.1, far: 100)
-        
         commandEncoder.setDepthStencilState(depthStencilState)
+        commandEncoder.setFrontFacing(.counterClockwise)
+        commandEncoder.setCullMode(.back)
         
-        commandEncoder.setRenderPipelineState(defaultShader)
+        let aspect = Float(1206.0/2622.0)
+    
+        //MARK: Camera
+        var sceneConstants = SceneConstants()
+        let sceneProjectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: 1, near: 0.1, far: 100)
+        let sceneRotationMatrix = matrix_float4x4(rotationAngle: 0, x: radians(degrees: -45), y: radians(degrees: -45), z: 0)
+        let sceneTranslationMatrix = matrix_float4x4(translationX: 2, y: -2, z: -5)
         
+        let sceneViewMatrix = matrix_multiply(sceneProjectionMatrix, sceneTranslationMatrix)
+        sceneConstants.sceneViewMatrix = sceneViewMatrix
+        
+        commandEncoder.setVertexBytes(&sceneConstants, length: MemoryLayout<SceneConstants>.stride,
+                                      index: 2)
+        
+        
+        //MARK: Cube
         time += 1 / Float(view.preferredFramesPerSecond)
         
         let animatedBy = time
+        let cubeRotationMatrix = matrix_float4x4(rotationAngle: time, x:1, y: 0, z: 1)
+        let cubeTranslationMatrix = matrix_float4x4(translationX: 0, y: 0, z: -5)
+        let cubeScaleMatrix = matrix_float4x4(scaleX: 1.5, y: 1.5, z: 1.5)
         
-        let rotationMatrix = matrix_float4x4(rotationAngle: animatedBy, x:0, y: 1, z: 1)
-        var translationMatrix = matrix_float4x4(translationX: 0, y: 0, z: -5)
-        var scaleMatrix = matrix_float4x4(scaleX: 1, y: 1, z: 1)
+        let aMatrix = matrix_multiply(cubeScaleMatrix, cubeRotationMatrix)
+        let bMatrix = matrix_multiply(cubeTranslationMatrix, aMatrix)
+        let cubeModelMatrix = bMatrix
+        cubeModelConstants.modelViewMatrix = cubeModelMatrix
         
-        
-        let modelViewMatrix = matrix_multiply(translationMatrix, rotationMatrix)
-        modelConstants.modelViewMatrix = modelViewMatrix
-        
-
-        
-        modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, modelViewMatrix)
-    
+        commandEncoder.setRenderPipelineState(defaultShader)
         commandEncoder.setVertexBuffer(cubeVertexBuffer, offset: 0, index: 0)
-        commandEncoder.setVertexBytes(&modelConstants,
+        commandEncoder.setVertexBytes(&cubeModelConstants,
                                       length: MemoryLayout<ModelConstants>.stride,
                                       index: 1)
         commandEncoder.setFragmentTexture(texture, index: 0)
 
         commandEncoder.setFragmentSamplerState(samplerState, index: 0)
-        
-        commandEncoder.setFrontFacing(.counterClockwise)
-        commandEncoder.setCullMode(.back)
         
         commandEncoder.drawIndexedPrimitives(type: .triangle,
                                              indexCount: cube.cubeIndices.count,
@@ -186,17 +193,22 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
                                       indexBuffer: cubeIndexBuffer,
                                       indexBufferOffset: 0)
         
+        //MARK: Plane
+        var planeModelConstants = ModelConstants()
+        
+        let planeScaleMatrix = matrix_float4x4(scaleX: 4, y: 4, z: 4)
+        let planeRotationMatrixX = matrix_float4x4(rotationAngle: radians(degrees: -45), x:1, y: 0, z: 0)
+        let planeRotationMatrixY = matrix_float4x4(rotationAngle: radians(degrees: -45), x:0, y: 1, z: 0)
+        let planeTranslationMatrix = matrix_float4x4(translationX: -3.5, y: 2, z: -5)
+        let calcA = matrix_multiply(planeRotationMatrixX,planeRotationMatrixY)
+        let calcB = matrix_multiply(calcA, planeScaleMatrix)
+        
+        
+        planeModelConstants.modelViewMatrix = matrix_multiply( planeTranslationMatrix, calcB)
+        
         commandEncoder.setRenderPipelineState(texturedShader)
-        translationMatrix = matrix_float4x4(translationX: 0, y: -1, z: -7)
-        scaleMatrix = matrix_float4x4(scaleX: 1.5, y: 1.5, z: 0)
-        
-        let transformedMatrix = matrix_multiply(translationMatrix, scaleMatrix)
-        
-        modelConstants.modelViewMatrix = matrix_multiply(projectionMatrix, transformedMatrix)
-        
-        
         commandEncoder.setVertexBuffer(planeVertexBuffer, offset: 0, index: 0)
-        commandEncoder.setVertexBytes(&modelConstants,
+        commandEncoder.setVertexBytes(&planeModelConstants,
                                       length: MemoryLayout<ModelConstants>.stride,
                                       index: 1)
         commandEncoder.setFragmentTexture(texture, index: 0)

@@ -16,6 +16,10 @@ struct ModelConstants {
     var modelViewMatrix = matrix_identity_float4x4
 }
 
+struct SceneConstants {
+    var sceneViewMatrix = matrix_identity_float4x4
+}
+
 struct Vertex {
     var position: SIMD3<Float>
     var color: SIMD4<Float>
