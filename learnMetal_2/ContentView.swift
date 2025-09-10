@@ -26,7 +26,7 @@ struct metalView: UIViewRepresentable {
         mtkView.device = MTLCreateSystemDefaultDevice()
         mtkView.clearColor = Colors.wenderlichGreen
 
-        let delegate = MetalViewDelegate(metalKitView: mtkView)
+        let delegate = MetalViewDelegate(metalView: mtkView)
         mtkView.delegate = delegate
         context.coordinator.delegate = delegate
         return mtkView
