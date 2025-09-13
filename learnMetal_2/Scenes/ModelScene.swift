@@ -7,7 +7,7 @@
 
 import MetalKit
 
-class ModelScene {
+class ModelScene: Renderer {
     let device: MTLDevice
     let view: MTKView
     
@@ -45,7 +45,7 @@ class ModelScene {
         if let texture = setTexture(device: device, imageName: "image.png") {
             self.texture = texture
         }
-        if let ttouchTexture = setTexture(device: device, imageName: "Texture_01") {
+        if let ttouchTexture = setTexture(device: device, imageName: "Texture_01.png") {
             self.ttouchTexture = ttouchTexture
         }
     }
@@ -206,6 +206,7 @@ class ModelScene {
         
         guard let defaultShader = self.defaultShader,
               let texturedShader = self.texturedShader,
+              let objShader = self.objShader,
               let planeIndexBuffer = self.planeIndexBuffer,
               let cubeIndexBuffer = self.cubeIndexBuffer else { return }
         
@@ -221,7 +222,6 @@ class ModelScene {
         
         commandEncoder.setVertexBytes(&sceneConstants, length: MemoryLayout<SceneConstants>.stride,
                                       index: 2)
-        
         
         //MARK: Cube
         var cubeModelConstants = ModelConstants()
@@ -250,42 +250,44 @@ class ModelScene {
                                       indexBufferOffset: 0)
         
         //MARK: Plane
-        var planeModelConstants = ModelConstants()
-        
-        let planeScaleMatrix = matrix_float4x4(scaleX: 4, y: 4, z: 4)
-        let planeRotationMatrixX = matrix_float4x4(rotationAngle: radians(degrees: -45), x:1, y: 0, z: 0)
-        let planeRotationMatrixY = matrix_float4x4(rotationAngle: radians(degrees: -45), x:0, y: 1, z: 0)
-        let planeTranslationMatrix = matrix_float4x4(translationX: -3.5, y: 2, z: -5)
-        let calcA = matrix_multiply(planeRotationMatrixX,planeRotationMatrixY)
-        let calcB = matrix_multiply(calcA, planeScaleMatrix)
-        
-        
-        planeModelConstants.modelViewMatrix = matrix_multiply( planeTranslationMatrix, calcB)
-        
-        commandEncoder.setRenderPipelineState(texturedShader)
-        commandEncoder.setVertexBuffer(planeVertexBuffer, offset: 0, index: 0)
-        commandEncoder.setVertexBytes(&planeModelConstants,
-                                      length: MemoryLayout<ModelConstants>.stride,
-                                      index: 1)
-        commandEncoder.setFragmentTexture(texture, index: 0)
+//        var planeModelConstants = ModelConstants()
+//        
+//        let planeScaleMatrix = matrix_float4x4(scaleX: 4, y: 4, z: 4)
+//        let planeRotationMatrixX = matrix_float4x4(rotationAngle: radians(degrees: -45), x:1, y: 0, z: 0)
+//        let planeRotationMatrixY = matrix_float4x4(rotationAngle: radians(degrees: -45), x:0, y: 1, z: 0)
+//        let planeTranslationMatrix = matrix_float4x4(translationX: -3.5, y: 2, z: -5)
+//        let calcA = matrix_multiply(planeRotationMatrixX,planeRotationMatrixY)
+//        let calcB = matrix_multiply(calcA, planeScaleMatrix)
+//        
+//        
+//        planeModelConstants.modelViewMatrix = matrix_multiply( planeTranslationMatrix, calcB)
+//        
+//        commandEncoder.setRenderPipelineState(texturedShader)
+//        commandEncoder.setVertexBuffer(planeVertexBuffer, offset: 0, index: 0)
+//        commandEncoder.setVertexBytes(&planeModelConstants,
+//                                      length: MemoryLayout<ModelConstants>.stride,
+//                                      index: 1)
+//        commandEncoder.setFragmentTexture(texture, index: 0)
+//
+//   
+//        
+//        commandEncoder.drawIndexedPrimitives(type: .triangle,
+//                                             indexCount: plane.planeIndices.count,
+//                                      indexType: .uint16,
+//                                      indexBuffer: planeIndexBuffer,
+//                                      indexBufferOffset: 0)
 
-   
-        
-        commandEncoder.drawIndexedPrimitives(type: .triangle,
-                                             indexCount: plane.planeIndices.count,
-                                      indexType: .uint16,
-                                      indexBuffer: planeIndexBuffer,
-                                      indexBufferOffset: 0)
-
-    //MARK: OBJ Model
+    //MARK: Ttouch
         
         var sourceModelConstants = ModelConstants()
         let ttouchScaleMatrix = matrix_float4x4(scaleX: 4, y: 4, z: 4)
         let ttouchTranslationMatrix = matrix_float4x4(translationX: -1, y: 1, z: 0)
         sourceModelConstants.modelViewMatrix = matrix_multiply(ttouchTranslationMatrix, ttouchScaleMatrix)
         
-        commandEncoder.setRenderPipelineState(objShader!)
+        commandEncoder.setRenderPipelineState(objShader)
         commandEncoder.setVertexBytes(&sourceModelConstants, length: MemoryLayout<ModelConstants>.stride, index: 1)
+        
+        commandEncoder.setFragmentTexture(texture, index: 0)
         
         guard let meshes = self.meshes?.1 as? [MTKMesh], meshes.count > 0 else { return }
 
@@ -303,3 +305,4 @@ class ModelScene {
     }
     
 }
+
