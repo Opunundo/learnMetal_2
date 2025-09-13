@@ -60,7 +60,8 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         
         time += 1 / Float(view.preferredFramesPerSecond)
         
-        let modelScene = ModelScene(device: device, view: view, time: time)
+        let modelScene = InstanceScene(device: device, view: view)
+//        let modelScene = ModelScene(device: device, view: view, time: time)
         modelScene.render(commandEncoder: commandEncoder)
         
         commandEncoder.endEncoding()
