@@ -13,6 +13,7 @@ class InstanceScene: Renderer {
     
     let device: MTLDevice
     let view: MTKView
+    var rotation: SIMD2<Float>
     
     var objShader: MTLRenderPipelineState?
     
@@ -21,15 +22,21 @@ class InstanceScene: Renderer {
     
     var meshes: ([MDLMesh], [MTKMesh])?
     
-    init(device: MTLDevice, view: MTKView) {
+    var light = Light()
+    
+    init(device: MTLDevice, view: MTKView, rotation: SIMD2<Float>) {
         self.device = device
         self.view = view
+        self.rotation = rotation
         
-        objShader = buildOBJPipelineState(frag: "defaultTexture")
+        objShader = buildOBJPipelineState(frag: "fragment_litTexture")
         if let ttouchTexture = setTexture(device: device, imageName: "Texture_01.png") {
             self.ttouchTexture = ttouchTexture
         }
         self.meshes = loadModel(device: device, modelName: "Ttouch")
+        
+        light.color = SIMD3<Float>(0, 0, 1)
+        light.ambientIntensity = 0.5
     }
     
     private func setTexture(device: MTLDevice, imageName: String) -> MTLTexture? {
@@ -139,15 +146,24 @@ class InstanceScene: Renderer {
         commandEncoder.setRenderPipelineState(objShader)
         
         var sceneConstants = SceneConstants()
-        let sceneProjectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: 1, near: 0.1, far: 100)
+        let aspect = Float(view.drawableSize.width / view.drawableSize.height)
+        let sceneProjectionMatrix = matrix_float4x4(fovY: radians(degrees:65), aspect: aspect, near: 0.1, far: 100)
+        
+        let rotX = matrix_float4x4(rotationAngle: rotation.y, x: 1, y: 0, z: 0)
+        let rotY = matrix_float4x4(rotationAngle: rotation.x, x: 0, y: 1, z: 0)
+        
         let sceneTranslationMatrix = matrix_float4x4(translationX: 0, y: -1, z: -5)
         
-        let sceneViewMatrix = matrix_multiply(sceneProjectionMatrix, sceneTranslationMatrix)
+        let modelMatrix = matrix_multiply(rotY, rotX)
+        let modelViewMatrix = matrix_multiply(sceneTranslationMatrix, modelMatrix)
+        
+        let sceneViewMatrix = matrix_multiply(sceneProjectionMatrix, modelViewMatrix)
         sceneConstants.sceneViewMatrix = sceneViewMatrix
         
         commandEncoder.setVertexBytes(&sceneConstants, length: MemoryLayout<SceneConstants>.stride,
                                       index: 2)
         
+        commandEncoder.setFragmentBytes(&light, length: MemoryLayout<Light>.stride, index: 3)
         
 //        MARK: 40 Ttouches, Instancing, One Draw Call
         var sourceModelConstantsArray = [ModelConstants](repeating: ModelConstants(), count: 40)
@@ -174,43 +190,9 @@ class InstanceScene: Renderer {
                                                      instanceCount: 40)
             }
         }
-        
-//        MARK: 40 Ttouches, Per-object Draw Call
-
-         for _ in 0..<40 {
-             var sourceModelConstants = ModelConstants()
-             
-             let ttouchScaleMatrix = matrix_float4x4(scaleX: Float(generator.next(upperBound: 5)), y: Float(generator.next(upperBound: 5)), z: Float(generator.next(upperBound: 5)))
-             let ttouchTranslationMatrix = matrix_float4x4(translationX: Float(generator.next(upperBound: 5))-2, y: Float(generator.next(upperBound: 5))-3, z: -5)
-             sourceModelConstants.modelViewMatrix = matrix_multiply(ttouchTranslationMatrix, ttouchScaleMatrix)
-             
-             commandEncoder.setVertexBytes(&sourceModelConstants, length: MemoryLayout<ModelConstants>.stride, index: 1)
-             
-             commandEncoder.setFragmentTexture(ttouchTexture, index: 0)
-             
-             guard let meshes = self.meshes?.1 as? [MTKMesh], meshes.count > 0 else { return }
-             
-             for mesh in meshes {
-                 let vertexBuffer = mesh.vertexBuffers[0]
-                 commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
-                 for submesh in mesh.submeshes {
-                     commandEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
-                                                          indexCount: submesh.indexCount,
-                                                          indexType: submesh.indexType,
-                                                          indexBuffer: submesh.indexBuffer.buffer,
-                                                          indexBufferOffset: submesh.indexBuffer.offset)
-                 }
-             }
-         }
-
-        
     }
-    
 }
-
-
 
 #Preview {
     ContentView()
 }
-

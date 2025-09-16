@@ -28,6 +28,11 @@ struct VertexOut {
     float2 textureCoordinates;
 };
 
+struct Light {
+    float3 color;
+    float ambientIntensity;
+};
+
 vertex VertexOut vertex_shader(const VertexIn vertexIn [[ stage_in ]],
                                constant ModelConstants &modelConstants [[ buffer(1) ]],
                                constant SceneConstants &sceneConstants [[ buffer(2) ]]) {
@@ -69,12 +74,26 @@ fragment half4 fragment_grayShader(VertexOut vertexIn [[ stage_in ]]) {
     return half4(vertexOut.color);
 }
 
-fragment half4 defaultTexture(VertexOut vertexIn [[ stage_in ]],
+fragment half4 fragment_texture(VertexOut vertexIn [[ stage_in ]],
                                       sampler sampler2d [[ sampler(0)]],
                                       texture2d<float> texture [[ texture(0) ]]) {
     constexpr sampler defaultSampler;
     float4 color = texture.sample(defaultSampler, vertexIn.textureCoordinates);
     return half4(color.r, color.g, color.b, vertexIn.color.a);
+}
+
+fragment half4 fragment_litTexture(VertexOut vertexIn [[ stage_in ]],
+                                      sampler sampler2d [[ sampler(0) ]],
+                                   constant Light &light [[ buffer(3) ]],
+                                      texture2d<float> texture [[ texture(0) ]]) {
+    constexpr sampler defaultSampler;
+    float4 color = texture.sample(defaultSampler, vertexIn.textureCoordinates);
+    
+    float3 ambientColor = light.color * light.ambientIntensity;
+    color = color * float4(ambientColor, 1);
+    
+    return half4(color.r, color.g, color.b, vertexIn.color.a);
+    
 }
 
 fragment half4 maskedTexture(VertexOut vertexIn [[ stage_in ]],

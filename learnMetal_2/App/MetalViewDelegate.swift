@@ -8,14 +8,20 @@ import SwiftUI
 import MetalKit
 
 class MetalViewDelegate : NSObject, MTKViewDelegate {
-    let device: MTLDevice
-    let commandQueue: MTLCommandQueue
+    private let device: MTLDevice
+    private let commandQueue: MTLCommandQueue
     
-    var samplerState: MTLSamplerState?
-    var depthStencilState: MTLDepthStencilState?
+    private var samplerState: MTLSamplerState?
+    private var depthStencilState: MTLDepthStencilState?
     
-    var time: Float = 0.0
+    private var time: Float = 0.0
     
+    
+    //화면 회전
+    private var yaw: Float = 0
+    private var pitch: Float = 0
+    private var previousTouch: CGPoint = .zero
+    private let sensitivity: Float = 0.01
     
     init?(metalView: MTKView){
         self.device = metalView.device ?? MTLCreateSystemDefaultDevice()!
@@ -27,6 +33,24 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         buildSamplerState()
         buildDepthStencilState()
     }
+    
+    func handleTouchesBegan(_ touches: Set<UITouch>, in view: UIView) {
+        guard let t = touches.first else { return }
+        previousTouch = t.location(in: view)
+    }
+    func handleTouchesMoved(_ touches: Set<UITouch>, in view: UIView) {
+        guard let t = touches.first else { return }
+        let loc = t.location(in: view)
+        let dx = Float(loc.x - previousTouch.x)
+        let dy = Float(loc.y - previousTouch.y)
+        
+        pitch += dy * sensitivity
+        yaw += dx * sensitivity
+        
+        previousTouch = loc
+    }
+    func handleTouchesEnded(_ touches: Set<UITouch>, in view: UIView) {}
+    func handleTouchesCancelled(_ touches: Set<UITouch>, in view: UIView) {}
     
     private func buildSamplerState() {
         let descriptor = MTLSamplerDescriptor()
@@ -41,8 +65,6 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         depthStencilDescriptor.isDepthWriteEnabled = true
         depthStencilState = device.makeDepthStencilState(descriptor: depthStencilDescriptor)
     }
-    
-
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         
@@ -62,7 +84,7 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         
         time += 1 / Float(view.preferredFramesPerSecond)
         
-        let modelScene = InstanceScene(device: device, view: view)
+        let modelScene = InstanceScene(device: device, view: view, rotation: SIMD2<Float>(yaw, pitch))
 //        let modelScene = ModelScene(device: device, view: view, time: time)
         modelScene.render(commandEncoder: commandEncoder)
         
@@ -70,8 +92,4 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }
-}
-
-#Preview {
-    ContentView()
 }
