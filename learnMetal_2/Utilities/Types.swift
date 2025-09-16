@@ -29,3 +29,15 @@ struct Vertex {
 struct Primitive {
     
 }
+
+struct SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+    mutating func next() -> UInt64 {
+        state = state &* 6364136223846793005 &+ 1
+        return state
+    }
+    mutating func next(upperBound: UInt32) -> UInt32 {
+        return UInt32(next() % UInt64(upperBound))
+    }
+}

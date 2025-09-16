@@ -8,6 +8,9 @@ import SwiftUI
 import MetalKit
 
 class InstanceScene: Renderer {
+    
+    var generator = SeededGenerator(seed: 1234)
+    
     let device: MTLDevice
     let view: MTKView
     
@@ -44,9 +47,10 @@ class InstanceScene: Renderer {
         
         return texture
     }
+    
     private func buildOBJPipelineState(frag: String) -> MTLRenderPipelineState? {
         guard let library = device.makeDefaultLibrary(),
-              let vertexFunction = library.makeFunction(name: "vertex_shader"),
+              let vertexFunction = library.makeFunction(name: "instanced_vertex_shader"),
               let fragmentFunction = library.makeFunction(name: frag)
         else { return nil }
         
@@ -55,6 +59,7 @@ class InstanceScene: Renderer {
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        pipelineDescriptor.depthAttachmentPixelFormat = .depth32Float
         
         let vertexDescriptor = buildVertexDescriptor()
         
@@ -68,6 +73,7 @@ class InstanceScene: Renderer {
             return nil
         }
     }
+    
     private func buildVertexDescriptor() -> MTLVertexDescriptor {
         let vertexDescriptor = MTLVertexDescriptor()
         
@@ -91,6 +97,7 @@ class InstanceScene: Renderer {
         
         return vertexDescriptor
     }
+    
     private func loadModel(device: MTLDevice, modelName: String) -> ([MDLMesh], [MTKMesh])? {
         guard let assetURL = Bundle.main.url(forResource: modelName, withExtension: "obj") else {
             fatalError("Asset \(modelName) dose not exist.")
@@ -141,35 +148,64 @@ class InstanceScene: Renderer {
         commandEncoder.setVertexBytes(&sceneConstants, length: MemoryLayout<SceneConstants>.stride,
                                       index: 2)
         
-        //MARK: 40 Ttouches
-        for _ in 0..<40 {
-                               
-            var sourceModelConstants = ModelConstants()
-                               
-            let ttouchScaleMatrix = matrix_float4x4(scaleX: Float(arc4random_uniform(5)), y: Float(arc4random_uniform(5)), z: Float(arc4random_uniform(5)))
-            let ttouchTranslationMatrix = matrix_float4x4(translationX: Float(arc4random_uniform(5))-2, y: Float(arc4random_uniform(5))-3, z: -5)
-            sourceModelConstants.modelViewMatrix = matrix_multiply(ttouchTranslationMatrix, ttouchScaleMatrix)
-            
-            commandEncoder.setVertexBytes(&sourceModelConstants, length: MemoryLayout<ModelConstants>.stride, index: 1)
-            
-            commandEncoder.setFragmentTexture(ttouchTexture, index: 0)
-            
-            guard let meshes = self.meshes?.1 as? [MTKMesh], meshes.count > 0 else { return }
-
-            for mesh in meshes {
-                let vertexBuffer = mesh.vertexBuffers[0]
-                commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
-                for submesh in mesh.submeshes {
-                    commandEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
-                                                         indexCount: submesh.indexCount,
-                                                         indexType: submesh.indexType,
-                                                         indexBuffer: submesh.indexBuffer.buffer,
-                                                         indexBufferOffset: submesh.indexBuffer.offset)
-                }
+        
+//        MARK: 40 Ttouches, Instancing, One Draw Call
+        var sourceModelConstantsArray = [ModelConstants](repeating: ModelConstants(), count: 40)
+        guard let meshes = self.meshes?.1 as? [MTKMesh], meshes.count > 0 else { return }
+        
+        for i in 0..<40 {
+            let ttouchScaleMatrix = matrix_float4x4(scaleX: Float(generator.next(upperBound: 5)), y: Float(generator.next(upperBound: 5)), z: Float(generator.next(upperBound: 5)))
+            let ttouchTranslationMatrix = matrix_float4x4(translationX: Float(generator.next(upperBound: 5))-2, y: Float(generator.next(upperBound: 5))-3, z: -5)
+            sourceModelConstantsArray[i].modelViewMatrix = matrix_multiply(ttouchTranslationMatrix, ttouchScaleMatrix)
+        }
+        
+        commandEncoder.setVertexBytes(&sourceModelConstantsArray, length: MemoryLayout<ModelConstants>.stride * sourceModelConstantsArray.count, index: 1)
+        commandEncoder.setFragmentTexture(ttouchTexture, index: 0)
+        
+        for mesh in meshes {
+            let vertexBuffer = mesh.vertexBuffers[0]
+            commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
+            for submesh in mesh.submeshes {
+                commandEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
+                                                     indexCount: submesh.indexCount,
+                                                     indexType: submesh.indexType,
+                                                     indexBuffer: submesh.indexBuffer.buffer,
+                                                     indexBufferOffset: submesh.indexBuffer.offset,
+                                                     instanceCount: 40)
             }
         }
-        }
-            
+        
+//        MARK: 40 Ttouches, Per-object Draw Call
+
+         for _ in 0..<40 {
+             var sourceModelConstants = ModelConstants()
+             
+             let ttouchScaleMatrix = matrix_float4x4(scaleX: Float(generator.next(upperBound: 5)), y: Float(generator.next(upperBound: 5)), z: Float(generator.next(upperBound: 5)))
+             let ttouchTranslationMatrix = matrix_float4x4(translationX: Float(generator.next(upperBound: 5))-2, y: Float(generator.next(upperBound: 5))-3, z: -5)
+             sourceModelConstants.modelViewMatrix = matrix_multiply(ttouchTranslationMatrix, ttouchScaleMatrix)
+             
+             commandEncoder.setVertexBytes(&sourceModelConstants, length: MemoryLayout<ModelConstants>.stride, index: 1)
+             
+             commandEncoder.setFragmentTexture(ttouchTexture, index: 0)
+             
+             guard let meshes = self.meshes?.1 as? [MTKMesh], meshes.count > 0 else { return }
+             
+             for mesh in meshes {
+                 let vertexBuffer = mesh.vertexBuffers[0]
+                 commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
+                 for submesh in mesh.submeshes {
+                     commandEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
+                                                          indexCount: submesh.indexCount,
+                                                          indexType: submesh.indexType,
+                                                          indexBuffer: submesh.indexBuffer.buffer,
+                                                          indexBufferOffset: submesh.indexBuffer.offset)
+                 }
+             }
+         }
+
+        
+    }
+    
 }
 
 
@@ -177,3 +213,4 @@ class InstanceScene: Renderer {
 #Preview {
     ContentView()
 }
+

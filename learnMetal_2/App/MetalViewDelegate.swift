@@ -22,6 +22,8 @@ class MetalViewDelegate : NSObject, MTKViewDelegate {
         self.commandQueue = self.device.makeCommandQueue()!
         super.init()
     
+        metalView.depthStencilPixelFormat = .depth32Float
+        
         buildSamplerState()
         buildDepthStencilState()
     }
