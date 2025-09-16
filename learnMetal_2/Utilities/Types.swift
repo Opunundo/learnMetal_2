@@ -41,3 +41,8 @@ struct SeededGenerator: RandomNumberGenerator {
         return UInt32(next() % UInt64(upperBound))
     }
 }
+
+struct Light {
+    var color = SIMD3<Float>(repeating: 1)
+    var ambientIntensity: Float = 1.0
+}
